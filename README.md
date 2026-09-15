@@ -65,6 +65,56 @@ build/updates.json                 ← 自动更新的元数据
 
 > 如果暂时不做自动更新，把 `updateURL` 指向任意一个格式正确的 `https://` 地址即可，安装不受影响。
 
+#### 用 GitHub Releases 托管
+
+本项目当前就用这种方式，`updateURL` 指向：
+
+```text
+https://github.com/yellow-queer/zotero-LLM_summerize/releases/latest/download/updates.json
+```
+
+`npm run release <patch|minor|major>` 跑完后，把**两个文件**作为 release 附件上传：
+
+| 附件 | 作用 |
+| --- | --- |
+| `build/zotero-llm-summarizer.xpi` | 用户下载安装的文件 |
+| `build/updates.json` | 已安装用户检查更新用的元数据 |
+
+操作步骤（GitHub 网页即可，不需要 `gh` 或命令行）：
+
+1. 仓库 → **Releases** → **Draft a new release**；
+2. **Choose a tag** 里填一个**新**标签，例如 `v0.1.4` → 创建；
+3. 把上面两个文件拖进附件区（**必须都上传，且不能改名**）；
+4. **Publish release**。
+
+`releases/latest/download/<文件名>` 会自动解析到**最新一个已发布**的 release，所以这个地址永远不变 —— 不需要每次改 `updateURL`。
+
+两个容易出错的点：
+
+- **草稿（Draft）和预发布（Pre-release）不算「latest」**。标成预发布后 `releases/latest/...` 会跳到上一个正式版，用户就收不到更新了。
+- **发布产物不要提交进源码仓库**。`.gitignore` 里已经有 `build/` 和 `*.xpi`，保持这样 —— 仓库里那份过期的 `.xpi` 是个隐患，用户可能下载到旧版。发布只走 Release 附件。
+
+**工程文件不要上传到 release 附件里**：只拖那两个文件。
+
+> 仓库根目录上有一个 `zotero-llm-summarizer.xpi`，提交信息是 `Add files via upload` —— 那是**在 GitHub 网页上拖拽上传**产生的提交。网页上传**绕过 `.gitignore`**，而 `.gitignore` 里已有的 `*.xpi` 也不会让一个已经被跟踪的文件自动取消跟踪。请删掉它（`git rm --cached zotero-llm-summarizer.xpi`，或在网页上删除）：仓库里放一份不受版本管理、也无法自动更新的 `.xpi`，只会让人下载到旧版。
+
+不过要说清楚一个前提：**分发 Zotero 插件无法真正保密源码**。`.xpi` 是个 zip，里面必然包含可执行的 `content/scripts/llmsummarizer.js`（本项目是 esbuild 压缩后的产物，不含 TS 源码和 sourcemap）。压缩只是提高了阅读成本，不是保护措施——任何人解压都能读。真要保护实现，唯一可靠的办法是不公开分发。
+
+> 换用别的托管（自己的网站、Cloudflare Pages 等）也完全可以：把这两个文件放到任意公开目录，把 `config.updateURL` 改成那里的 `updates.json` 地址即可，`update_link` 会自动指向同目录的 `.xpi`。唯一的硬性要求是**匿名可访问**（见下）。
+
+之所以不需要签名、也不需要指定主机，是因为 Zotero 关掉了 Firefox 的这两项限制（见 `defaults/preferences/zotero.js`）：
+
+```js
+pref("xpinstall.signatures.required", false);   // 未签名的 xpi 可以安装
+pref("xpinstall.whitelist.required", false);    // 允许从任意主机安装
+```
+
+所以**不需要签名，也不需要托管在 Mozilla 白名单主机上**。另外更新检查走的是系统权限的特权 XHR（`AddonUpdateChecker.sys.mjs` 的 `ServiceRequest`），**不受 CORS 限制**——服务器不需要配置任何跨域响应头，`Content-Type` 也不影响（它对 `updates.json` 会自己 `overrideMimeType("text/plain")` 再 `JSON.parse`）。
+
+唯一不能违反的是**匿名可访问**：请求带 `mozAnon: true`，不带 Cookie，所以别给这两个文件加登录、防盗链或私有仓库权限。被挡下不会报错，只是永远收不到更新。
+
+> 推论：**私有仓库的 Release 附件不能用于分发** —— 匿名请求拿不到。源码要私有的话，得换自己的网站或另建一个公开仓库。
+
 #### 发布新版本：让已安装用户自动更新
 
 Zotero 默认就会检查并**自动安装**插件更新，用户不需要做任何操作：

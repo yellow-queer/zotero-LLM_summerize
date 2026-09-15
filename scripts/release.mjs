@@ -60,9 +60,49 @@ function bumpVersion(current, spec) {
   return `${major}.${minor}.${patch + 1}`;
 }
 
+/**
+ * Hostname fragments that only ever belong to the shipped defaults.
+ *
+ * Publishing to one is the failure this whole script exists to prevent, one step
+ * further along: Zotero would fetch a URL that does not resolve, log nothing the
+ * user ever sees, and simply never update. Checking here costs nothing and turns
+ * a silent non-event into a message at the moment of the mistake.
+ */
+const PLACEHOLDER_HOSTS = ["yourname", "yourdomain", "example.com", "example.org"];
+
+/** Resolves `config.updateURL`, refusing to publish against a placeholder. */
+function resolveUpdateURL(updateURL) {
+  let url;
+  try {
+    url = new URL(updateURL);
+  } catch {
+    throw new Error(`package.json 的 config.updateURL 不是合法 URL：${updateURL}`);
+  }
+
+  // Matched against the whole URL, not just the host: the shipped placeholder is
+  // `github.com/yourname/...`, where the giveaway sits in the *path*.
+  const placeholder = PLACEHOLDER_HOSTS.find((marker) => updateURL.includes(marker));
+  if (placeholder) {
+    throw new Error(
+      `config.updateURL 仍是模板占位符（含 "${placeholder}"）：\n  ${updateURL}\n\n` +
+        `请先改成你实际的发布地址，例如 https://你的域名/zotero/updates.json。\n` +
+        `注意要改的是 package.json 的 config.updateURL —— 改了别处（如 .ref/ 下的副本）不会生效。`,
+    );
+  }
+
+  if (url.protocol !== "https:") {
+    // Not fatal on its own: a `sha256:` update_hash satisfies Zotero's security
+    // check even over http — `AddonUpdateChecker` accepts /^sha(256|512):/ — but
+    // then the .xpi itself travels in the clear and can be swapped in transit.
+    console.warn(`\n警告：updateURL 用的不是 https（${url.protocol}）。强烈建议改用 https。`);
+  }
+  return url;
+}
+
 async function main() {
   const raw = await readFile(pkgPath, "utf8");
   const pkg = JSON.parse(raw);
+  resolveUpdateURL(pkg.config.updateURL);
   const next = bumpVersion(pkg.version, process.argv[2]);
   if (next === pkg.version) {
     // Possible when the version is passed explicitly. Letting it through would
@@ -93,17 +133,26 @@ async function main() {
     process.exit(1);
   }
 
+  // The .xpi URL comes from the build's own manifest rather than being rebuilt
+  // here, so what gets printed is what Zotero will actually request.
   console.log(`
-已构建 ${next}，待发布的两个文件（必须同一次发布、同一目录）：
+已构建 ${next}。只上传这两个文件、且必须放在同一目录：
 
-  build/zotero-llm-summarizer.xpi
-  build/updates.json
+  →  build/zotero-llm-summarizer.xpi
+  →  build/updates.json
 
-上线后逐个核对：
-  1. updates.json 已可公开访问，且其中 update_link 指向的正是刚上传的 .xpi；
+工程文件（src/、addon/、scripts/、typings/、build/addon/）一律不要上传。
+
+上传后它们应当正好出现在：
+
+  ${entry.update_link}
+  ${pkg.config.updateURL}
+
+上线后核对：
+  1. 用浏览器打开上面的 updates.json 地址，确认能看到 JSON 且 version 是 ${next}；
   2. 不要改动 .xpi —— 它的 sha256 已写进 update_hash（${entry.update_hash.slice(0, 23)}…），改动一个字节即校验失败；
-  3. 打开 about:config 看 extensions.update.interval（默认 86400 秒）决定用户多久检查一次；
-     想立刻验证就手动触发一次检查，或在调试日志里搜 ${pkg.config.addonRef}。
+  3. 用户侧无需任何操作：Zotero 按 extensions.update.interval（默认 86400 秒）自动检查，启动时也会检查一次。
+     想立刻验证，就手动触发一次检查，或在调试日志里搜 ${pkg.config.addonRef}。
 `);
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "zotero-llm-summarizer",
   "type": "module",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "Zotero 7+ plugin: one-click AI literature summarization for PDF attachments, saved as child notes.",
   "private": true,
   "author": "Zotero LLM Summarizer contributors",
@@ -12,7 +12,7 @@
     "addonRef": "llmsummarizer",
     "addonInstance": "LLMSummarizer",
     "prefsPrefix": "extensions.zotero.llmsummarizer",
-    "updateURL": "https://github.com/yourname/zotero-llm-summarizer/releases/latest/download/updates.json",
+    "updateURL": "https://github.com/yellow-queer/zotero-LLM_summerize/releases/latest/download/updates.json",
     "strictMaxVersion": "*"
   },
   "scripts": {

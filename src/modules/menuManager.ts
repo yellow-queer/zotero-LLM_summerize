@@ -282,17 +282,21 @@ export class MenuManager {
       ]);
 
       line.setText("正在写入笔记…");
-      const noteID = await createSummaryNote(item, markdown, template.name);
+      const summary = await createSummaryNote(item, markdown, template.name);
 
       line.setItemTypeAndIcon(this.iconFor(item));
       line.setProgress(100);
-      line.setText(`已生成笔记：${template.name}`);
+      // A standalone note is not under the PDF the user clicked, so say so
+      // rather than letting them hunt for it in the item tree.
+      line.setText(
+        summary.standalone ? "已生成独立笔记（该 PDF 没有所属条目）" : `已生成笔记：${template.name}`,
+      );
 
       // Select the new note so the result is visible without hunting for it.
       try {
-        const note = Zotero.Items.get(noteID);
+        const note = Zotero.Items.get(summary.id);
         if (note && !Array.isArray(note)) {
-          (window as any).ZoteroPane?.selectItem?.(noteID);
+          (window as any).ZoteroPane?.selectItem?.(summary.id);
         }
       } catch (e) {
         log("Could not select the new note", e);

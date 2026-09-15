@@ -17,6 +17,7 @@ import { buildPromptContext, renderPrompt } from "../src/modules/promptLibrary";
 import { getString } from "../src/utils/l10n";
 import { TimeoutError, createAbortController, withTimeout } from "../src/utils/abort";
 import { MenuManager } from "../src/modules/menuManager";
+import { resolveNoteTarget } from "../src/modules/noteManager";
 import {
   PREF_KEYS,
   fullPrefKey,
@@ -786,6 +787,74 @@ function checkIncludes(name: string, haystack: string, needle: string): void {
   }
 
   manager.removeFromWindow(windowStub);
+}
+
+// ------------------------------------------------------------- note placement
+
+{
+  // Regression: summarising a PDF that has no bibliographic parent — a file
+  // dropped straight into the library — failed *after* the model had answered,
+  // with "Parent item 1/… must be a regular item" from Zotero's own
+  // `Item._saveData`. The resolver asked `item.topLevelItem ?? item`, but
+  // `topLevelItem` walks the parent chain and returns the item *itself* when
+  // there is none: it never yields null, so the `??` could not fire and the
+  // attachment itself was handed to Zotero as the note's parent.
+  //
+  // The stubs below reproduce exactly that shape — `topLevelItem` pointing at
+  // the item itself — which is what Zotero returns for a top-level item.
+  const regular: Record<string, unknown> = {
+    id: 7,
+    libraryKey: "1/AAAA1111",
+    isRegularItem: () => true,
+  };
+  regular.topLevelItem = regular;
+
+  const attachedPDF: Record<string, unknown> = {
+    id: 8,
+    libraryKey: "1/BBBB2222",
+    isRegularItem: () => false,
+    topLevelItem: regular,
+  };
+
+  const standalonePDF: Record<string, unknown> = {
+    id: 9,
+    libraryKey: "1/CCCC3333",
+    isRegularItem: () => false,
+  };
+  standalonePDF.topLevelItem = standalonePDF;
+
+  const regularItem = regular as unknown as ZoteroItem;
+
+  const regularTarget = resolveNoteTarget(regularItem);
+  checkEqual("a regular item is its own note parent", regularTarget.kind, "child");
+  check(
+    "a regular item is not re-resolved to something else",
+    regularTarget.kind === "child" && regularTarget.parent === regularItem,
+  );
+
+  const childTarget = resolveNoteTarget(attachedPDF as unknown as ZoteroItem);
+  checkEqual("a PDF with a parent attaches to the parent", childTarget.kind, "child");
+  check(
+    "the walk lands on the bibliographic item, not the attachment",
+    childTarget.kind === "child" && childTarget.parent === regularItem,
+  );
+
+  // The self-reference is the whole point: it is why `?? item` was dead code.
+  check(
+    "a top-level item's topLevelItem is itself (the old fallback was unreachable)",
+    standalonePDF.topLevelItem === standalonePDF,
+  );
+
+  const standaloneTarget = resolveNoteTarget(standalonePDF as unknown as ZoteroItem);
+  checkEqual(
+    "a PDF with no parent is not offered as a note parent",
+    standaloneTarget.kind,
+    "standalone",
+  );
+  check(
+    "a standalone PDF is never its own note parent",
+    !(standaloneTarget.kind === "child" && standaloneTarget.parent === (standalonePDF as unknown as ZoteroItem)),
+  );
 }
 
 // --------------------------------------------------------------------- report

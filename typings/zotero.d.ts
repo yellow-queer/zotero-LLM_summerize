@@ -125,6 +125,19 @@ interface ZoteroItem {
 
   /** IDs of this item's child attachments (PDFs, snapshots, linked files). */
   getAttachments(): number[];
+  /**
+   * IDs of the collections this item is filed in. Throws if a recorded
+   * collection no longer exists, so treat it as fallible when it is only being
+   * used to place a new item somewhere tidy.
+   */
+  getCollections(includeTrashed?: boolean): number[];
+  /** Marks the collection list dirty; a separate `saveTx()` persists it. */
+  setCollections(collectionIDsOrKeys: Array<number | string>): void;
+  /**
+   * Adds a `dc:relation` link. Both items must already be in the same library,
+   * and the link is persisted by the next save.
+   */
+  addRelatedItem(item: ZoteroItem): boolean;
   getField(field: string, unformatted?: boolean, includeBaseMapped?: boolean): string;
   setField(field: string, value: string): void;
   /**
@@ -146,8 +159,10 @@ interface ZoteroItem {
   getNotes(): number[];
   addTag(tag: string, type?: number): boolean;
   /**
-   * `errorHandler` is called for database failures, which are otherwise
-   * swallowed — the promise resolves with `undefined` instead of rejecting.
+   * Rejects on failure. `errorHandler` only observes the error — it decides
+   * whether Zotero *also* reports it through `Zotero.logError`, and does not
+   * stop the rejection (`Zotero.DataObject#save()` rethrows unconditionally).
+   * A `catch` is therefore the only way to report a failed save.
    */
   saveTx(options?: {
     skipSelect?: boolean;

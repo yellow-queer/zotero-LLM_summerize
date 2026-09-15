@@ -1,0 +1,266 @@
+<!--
+  Preferences pane fragment for the LLM Summarizer plugin.
+
+  This is a *fragment*, not a full document: Zotero parses it and appends it to
+  the preferences window. The default namespace is XUL, so HTML elements must be
+  written as `html:div`, `html:input`, … while XUL elements (`groupbox`, `hbox`,
+  `button`, `menulist`) stay unprefixed.
+
+  Two mechanisms drive the pane:
+
+  1. `preference="<full.pref.key>"` — after insertion Zotero attaches a
+     bidirectional binding to every such element (writes the pref on
+     'input'/'change'/'command', re-reads it when the pref changes). Plain fields
+     therefore need no JavaScript at all.
+
+  2. Inline handlers — Zotero compiles `onload`/`oncommand` attributes and
+     evaluates them in the preferences window, which is why they address the
+     plugin through the global instance: `Zotero.LLMSummarizer.hooks.onPrefsEvent(...)`.
+
+  ID CONVENTION (relied upon by src/modules/preference.ts):
+    - every <html:label> / <html:h2> is  `zotero-prefpane-llmsummarizer-<name>`
+    - the control it labels is           `zotero-prefpane-llmsummarizer-<name>-input`
+    - buttons and containers keep a plain `-<name>` id and keep a hardcoded
+      `label=` attribute, since Fluent cannot format plugin strings before the
+      plugin's `.ftl` files are registered.
+
+  `data-l10n-id` is deliberately not used for that same reason: labels are
+  applied from `PreferencePane.onPaneLoad()`. The <linkset> below is still
+  required so Zotero loads the plugin's Fluent bundles at all.
+-->
+<linkset>
+  <html:link rel="localization" href="llmsummarizer-preferences.ftl" />
+</linkset>
+
+<groupbox
+  id="zotero-prefpane-llmsummarizer-root"
+  onload="Zotero.LLMSummarizer.hooks.onPrefsEvent('load', { window })"
+>
+  <!-- ============================= 模型接口 ============================= -->
+  <label><html:h2 id="zotero-prefpane-llmsummarizer-api-section"></html:h2></label>
+
+  <hbox align="center">
+    <html:label
+      id="zotero-prefpane-llmsummarizer-provider"
+      for="zotero-prefpane-llmsummarizer-provider-input"
+    ></html:label>
+    <menulist
+      id="zotero-prefpane-llmsummarizer-provider-input"
+      native="true"
+      oncommand="Zotero.LLMSummarizer.hooks.onPrefsEvent('providerChange', { window, value: this.value })"
+    >
+      <menupopup>
+        <menuitem label="DeepSeek" value="deepseek" />
+        <menuitem label="OpenAI" value="openai" />
+        <menuitem label="Kimi (Moonshot)" value="moonshot" />
+        <menuitem label="通义千问 (DashScope)" value="dashscope" />
+        <menuitem label="Ollama / 本地模型" value="ollama" />
+        <menuitem label="自定义（保留当前值）" value="custom" />
+      </menupopup>
+    </menulist>
+  </hbox>
+
+  <hbox align="center">
+    <html:label
+      id="zotero-prefpane-llmsummarizer-baseurl"
+      for="zotero-prefpane-llmsummarizer-baseurl-input"
+    ></html:label>
+    <html:input
+      type="text"
+      id="zotero-prefpane-llmsummarizer-baseurl-input"
+      class="pref-input pref-input-wide"
+      preference="extensions.zotero.llmsummarizer.apiBaseUrl"
+      placeholder="https://api.deepseek.com/v1"
+    />
+  </hbox>
+
+  <hbox align="center">
+    <html:label
+      id="zotero-prefpane-llmsummarizer-apikey"
+      for="zotero-prefpane-llmsummarizer-apikey-input"
+    ></html:label>
+    <html:input
+      type="password"
+      id="zotero-prefpane-llmsummarizer-apikey-input"
+      class="pref-input pref-input-wide"
+      preference="extensions.zotero.llmsummarizer.apiKey"
+      placeholder="sk-..."
+      autocomplete="off"
+    />
+  </hbox>
+
+  <hbox align="center">
+    <html:label
+      id="zotero-prefpane-llmsummarizer-model"
+      for="zotero-prefpane-llmsummarizer-model-input"
+    ></html:label>
+    <html:input
+      type="text"
+      id="zotero-prefpane-llmsummarizer-model-input"
+      class="pref-input"
+      preference="extensions.zotero.llmsummarizer.modelName"
+      placeholder="deepseek-chat"
+    />
+  </hbox>
+
+  <hbox align="center">
+    <html:label
+      id="zotero-prefpane-llmsummarizer-temperature"
+      for="zotero-prefpane-llmsummarizer-temperature-input"
+    ></html:label>
+    <!-- The `preference` binding writes the raw string; llmClient coerces it. -->
+    <html:input
+      type="number"
+      id="zotero-prefpane-llmsummarizer-temperature-input"
+      class="pref-input pref-input-narrow"
+      preference="extensions.zotero.llmsummarizer.temperature"
+      min="0"
+      max="2"
+      step="0.1"
+    />
+  </hbox>
+
+  <hbox align="center">
+    <html:label
+      id="zotero-prefpane-llmsummarizer-maxchars"
+      for="zotero-prefpane-llmsummarizer-maxchars-input"
+    ></html:label>
+    <html:input
+      type="number"
+      id="zotero-prefpane-llmsummarizer-maxchars-input"
+      class="pref-input"
+      preference="extensions.zotero.llmsummarizer.maxChars"
+      min="1000"
+      max="500000"
+      step="1000"
+    />
+    <html:span class="pref-hint"
+      >超过此长度时保留前 60% 与后 40%，避免超出模型上下文。</html:span
+    >
+  </hbox>
+
+  <hbox align="center">
+    <html:label
+      id="zotero-prefpane-llmsummarizer-timeout"
+      for="zotero-prefpane-llmsummarizer-timeout-input"
+    ></html:label>
+    <html:input
+      type="number"
+      id="zotero-prefpane-llmsummarizer-timeout-input"
+      class="pref-input pref-input-narrow"
+      preference="extensions.zotero.llmsummarizer.timeoutSeconds"
+      min="5"
+      max="600"
+      step="5"
+    />
+  </hbox>
+
+  <hbox align="center">
+    <html:label
+      id="zotero-prefpane-llmsummarizer-language"
+      for="zotero-prefpane-llmsummarizer-language-input"
+    ></html:label>
+    <html:input
+      type="text"
+      id="zotero-prefpane-llmsummarizer-language-input"
+      class="pref-input"
+      preference="extensions.zotero.llmsummarizer.language"
+      placeholder="zh-CN"
+    />
+    <html:span class="pref-hint">如 zh-CN / en-US / ja-JP。</html:span>
+  </hbox>
+
+  <hbox align="center">
+    <checkbox
+      id="zotero-prefpane-llmsummarizer-debug-input"
+      preference="extensions.zotero.llmsummarizer.debug"
+    />
+    <html:label
+      id="zotero-prefpane-llmsummarizer-debug"
+      for="zotero-prefpane-llmsummarizer-debug-input"
+    ></html:label>
+  </hbox>
+
+  <hbox align="center" pack="start">
+    <button
+      id="zotero-prefpane-llmsummarizer-test"
+      label="测试连接"
+      oncommand="Zotero.LLMSummarizer.hooks.onPrefsEvent('testConnection', { window })"
+    />
+    <html:span id="zotero-prefpane-llmsummarizer-status" class="status status-idle"></html:span>
+  </hbox>
+
+  <separator class="thin" />
+
+  <!-- =========================== Prompt 模板库 =========================== -->
+  <label><html:h2 id="zotero-prefpane-llmsummarizer-prompt-section"></html:h2></label>
+
+  <hbox flex="1" height="380px" align="stretch">
+    <!-- Filled by PreferencePane.renderTemplateList(). -->
+    <vbox
+      id="zotero-prefpane-llmsummarizer-prompt-list"
+      class="prompt-list"
+      width="230px"
+      flex="0"
+    />
+
+    <vbox
+      id="zotero-prefpane-llmsummarizer-prompt-editor"
+      class="prompt-editor"
+      flex="1"
+      data-template-id=""
+    >
+      <hbox align="center">
+        <html:label
+          id="zotero-prefpane-llmsummarizer-prompt-name"
+          for="zotero-prefpane-llmsummarizer-prompt-name-input"
+        ></html:label>
+        <html:input
+          type="text"
+          id="zotero-prefpane-llmsummarizer-prompt-name-input"
+          class="pref-input"
+          flex="1"
+        />
+      </hbox>
+
+      <hbox align="center">
+        <html:label
+          id="zotero-prefpane-llmsummarizer-prompt-body"
+          for="zotero-prefpane-llmsummarizer-prompt-body-input"
+        ></html:label>
+      </hbox>
+
+      <html:textarea
+        id="zotero-prefpane-llmsummarizer-prompt-body-input"
+        class="prompt-body"
+        flex="1"
+      ></html:textarea>
+
+      <hbox>
+        <button
+          id="zotero-prefpane-llmsummarizer-prompt-add"
+          label="新建模板"
+          oncommand="Zotero.LLMSummarizer.hooks.onPrefsEvent('addTemplate', { window })"
+        />
+        <button
+          id="zotero-prefpane-llmsummarizer-prompt-save"
+          label="保存模板"
+          oncommand="Zotero.LLMSummarizer.hooks.onPrefsEvent('saveTemplate', { window })"
+        />
+        <button
+          id="zotero-prefpane-llmsummarizer-prompt-delete"
+          label="删除"
+          oncommand="Zotero.LLMSummarizer.hooks.onPrefsEvent('deleteTemplate', { window })"
+        />
+        <spacer flex="1" />
+        <button
+          id="zotero-prefpane-llmsummarizer-prompt-reset"
+          label="恢复预设"
+          oncommand="Zotero.LLMSummarizer.hooks.onPrefsEvent('resetTemplates', { window })"
+        />
+      </hbox>
+    </vbox>
+  </hbox>
+
+  <html:p id="zotero-prefpane-llmsummarizer-help" class="pref-hint-help"></html:p>
+</groupbox>
